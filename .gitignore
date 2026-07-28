@@ -1,0 +1,74 @@
+# Root Gitignore for QMS AI Co-Pilot
+
+# Python Cache & Bytecodes
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+/backend/venv/
+/backend/.venv/
+
+# Environment Variables & Sensitive Credentials
+.env
+.env.*
+!backend/.env.example
+
+# Local SQLite Database
+backend/qms_complaints.db
+backend/qms_complaints.db-journal
+*.db
+*.sqlite3
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Node Modules & Frontend Builds
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+.eslintcache
+
+# Editor Settings & OS Files
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Generated Demo Files
+Complaint.pdf
