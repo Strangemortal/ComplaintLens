@@ -93,11 +93,25 @@ def run_mock_edit(message: str, current: ComplaintSchema) -> ComplaintSchema:
             match = re.search(r"(\d+\s*(?:strips|boxes|packs|units|capsules|tablets)?)", msg_lower)
         if match:
             val = match.group(1)
+            new_qty_str = ""
             if val.isdigit():
                 prev_suffix = "".join([c for c in (current.quantity or "") if not c.isdigit()]).strip()
-                updated.quantity = f"{val} {prev_suffix}".strip()
+                new_qty_str = f"{val} {prev_suffix}".strip()
+                updated.quantity = new_qty_str
             else:
+                new_qty_str = val
                 updated.quantity = val
+                
+            # If the description contains the old quantity digits, replace them to maintain consistency
+            if current.quantity and current.complaint_description:
+                old_numbers = re.findall(r'\d+', current.quantity)
+                new_numbers = re.findall(r'\d+', new_qty_str)
+                if old_numbers and new_numbers:
+                    old_num = old_numbers[0]
+                    new_num = new_numbers[0]
+                    if old_num in current.complaint_description:
+                        updated.complaint_description = current.complaint_description.replace(old_num, new_num)
+                        
                 
     # Update MFG Date
     if "mfg" in msg_lower or "manufactur" in msg_lower:
@@ -116,6 +130,15 @@ def run_mock_edit(message: str, current: ComplaintSchema) -> ComplaintSchema:
         match = re.search(r"(?:product|name)\s*(?:is|to|be)?\s*([a-z]+)", msg_lower)
         if match:
             updated.product_name = match.group(1).strip().title()
+            
+    # Update Complaint Description
+    if any(k in msg_lower for k in ["description", "complaint", "defect", "details", "issue", "problem"]):
+        match = re.search(r"(?:description|complaint|defect|details|issue|problem)\s*(?:is|to|be)?\s*(?:actually)?\s*([a-z0-9\s,\.]+?)(?:\s+instead|\.|$|,)", msg_lower)
+        if match:
+            updated.complaint_description = match.group(1).strip().capitalize()
+    elif any(k in msg_lower for k in ["discolor", "broken", "crack", "damage", "smell", "spots", "crushed"]):
+        clean_msg = re.sub(r'\s+instead|\.|$|,', '', message).strip()
+        updated.complaint_description = clean_msg[0].upper() + clean_msg[1:] if clean_msg else clean_msg
             
     return updated
 
