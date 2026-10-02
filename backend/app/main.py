@@ -1,4 +1,12 @@
 import os
+import sys
+from pathlib import Path
+
+# Ensure backend root is on sys.path
+backend_root = str(Path(__file__).resolve().parent.parent)
+if backend_root not in sys.path:
+    sys.path.insert(0, backend_root)
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -42,6 +50,6 @@ def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    # Allow running directly via python app/main.py
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
+

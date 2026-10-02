@@ -6,7 +6,7 @@ router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 @router.post("")
 async def upload_document(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
+    if not (file.filename and file.filename.lower().endswith(".pdf")):
         raise HTTPException(status_code=400, detail="Only PDF files are supported.")
         
     try:
@@ -24,5 +24,8 @@ async def upload_document(file: UploadFile = File(...)):
             "risk": result["risk"],
             "chat_response": "PDF uploaded and processed. Complaint fields have been pre-filled from document text."
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+

@@ -34,6 +34,8 @@ export default function DocumentUploader() {
     if (files && files.length > 0) {
       processFile(files[0]);
     }
+    // Reset file input value so selecting the same file again works
+    e.target.value = '';
   };
 
   const triggerFileInput = () => {
@@ -43,11 +45,12 @@ export default function DocumentUploader() {
   };
 
   const processFile = (file) => {
-    if (!file.name.endsWith('.pdf')) {
+    if (!file || !file.name || !file.name.toLowerCase().endsWith('.pdf')) {
       setUploadStatus('error');
       setErrorMessage('Only PDF documents are supported.');
       return;
     }
+
 
     setUploadStatus(null);
     setErrorMessage('');

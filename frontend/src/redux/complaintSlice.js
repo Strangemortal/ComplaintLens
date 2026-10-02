@@ -26,7 +26,14 @@ export const fetchComplaintsList = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const response = await fetch(`${API_BASE}/complaints`);
-      if (!response.ok) throw new Error('Failed to fetch historical complaints.');
+      if (!response.ok) {
+        let errMsg = 'Failed to fetch historical complaints.';
+        try {
+          const errData = await response.json();
+          if (errData?.detail) errMsg = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       return await response.json();
     } catch (err) {
       return rejectWithValue(err.message);
@@ -43,13 +50,43 @@ export const saveComplaintToDb = createAsyncThunk(
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ form, risk }),
       });
-      if (!response.ok) throw new Error('Failed to save complaint to database.');
+      if (!response.ok) {
+        let errMsg = 'Failed to save complaint to database.';
+        try {
+          const errData = await response.json();
+          if (errData?.detail) errMsg = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       return await response.json();
     } catch (err) {
       return rejectWithValue(err.message);
     }
   }
 );
+
+export const deleteComplaintFromDb = createAsyncThunk(
+  'complaints/delete',
+  async (id, { rejectWithValue }) => {
+    try {
+      const response = await fetch(`${API_BASE}/complaints/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        let errMsg = 'Failed to delete complaint record.';
+        try {
+          const errData = await response.json();
+          if (errData?.detail) errMsg = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
+      return id;
+    } catch (err) {
+      return rejectWithValue(err.message);
+    }
+  }
+);
+
 
 export const uploadComplaintPDF = createAsyncThunk(
   'complaints/uploadPDF',
@@ -108,7 +145,14 @@ export const sendChatMessage = createAsyncThunk(
         }),
       });
 
-      if (!response.ok) throw new Error('API failed to respond.');
+      if (!response.ok) {
+        let errMsg = 'API failed to respond.';
+        try {
+          const errData = await response.json();
+          if (errData?.detail) errMsg = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+        } catch (_) {}
+        throw new Error(errMsg);
+      }
       const data = await response.json();
 
       // Add AI response to chat log
@@ -147,8 +191,34 @@ const complaintsSlice = createSlice({
     },
     resetSaveSuccess: (state) => {
       state.saveSuccess = false;
+    },
+    updateFormField: (state, action) => {
+      const { field, value } = action.payload;
+      state.activeComplaint[field] = value;
+    },
+    loadComplaintRecord: (state, action) => {
+      const c = action.payload;
+      state.activeComplaint = {
+        product_name: c.product_name || '',
+        strength: c.strength || '',
+        batch_number: c.batch_number || '',
+        manufacturing_date: c.manufacturing_date || '',
+        expiry_date: c.expiry_date || '',
+        quantity: c.quantity || '',
+        complaint_description: c.complaint_description || '',
+      };
+      if (c.risk_assessment) {
+        state.activeRisk = {
+          severity: c.risk_assessment.severity || '',
+          priority: c.risk_assessment.priority || '',
+          reason: c.risk_assessment.reason || '',
+          impact: c.risk_assessment.impact || '',
+          recommended_action: c.risk_assessment.recommended_action || '',
+        };
+      }
     }
   },
+
   extraReducers: (builder) => {
     builder
       // Fetch list
@@ -180,6 +250,10 @@ const complaintsSlice = createSlice({
         state.error = action.payload;
         state.saveSuccess = false;
       })
+      // Delete complaint
+      .addCase(deleteComplaintFromDb.fulfilled, (state, action) => {
+        state.complaintsList = state.complaintsList.filter((c) => c.id !== action.payload);
+      })
       // Upload PDF
       .addCase(uploadComplaintPDF.pending, (state) => {
         state.loading = true;
@@ -209,5 +283,12 @@ const complaintsSlice = createSlice({
   },
 });
 
-export const { clearActiveComplaint, resetSaveSuccess } = complaintsSlice.actions;
+export const { 
+  clearActiveComplaint, 
+  resetSaveSuccess, 
+  updateFormField, 
+  loadComplaintRecord 
+} = complaintsSlice.actions;
 export default complaintsSlice.reducer;
+
+

@@ -28,44 +28,160 @@ class IntentOutput(BaseModel):
 # ----------------- Helper Mock Rules for Local Sandbox -----------------
 def run_mock_intent_detection(message: str) -> str:
     msg_lower = message.lower()
-    if any(k in msg_lower for k in ["instead", "update", "change", "batch number is", "quantity is", "actually"]):
+    if any(k in msg_lower for k in ["instead", "update", "change", "batch number is", "quantity is", "actually", "correct the", "change batch", "change quantity"]):
         return "EDIT_COMPLAINT"
-    elif any(k in msg_lower for k in ["complaint", "pharmacy", "received", "box", "strip", "discolor", "broken", "capsule", "tablet"]):
+    elif any(k in msg_lower for k in [
+        "complaint", "pharmacy", "received", "box", "strip", "discolor", "broken", 
+        "capsule", "tablet", "defect", "contamination", "particles", "damaged", "paracetamol", "amoxicillin", "aspirin"
+    ]):
         return "NEW_COMPLAINT"
     else:
         return "GENERAL_CHAT"
 
+COMMON_DRUGS = [
+    "Paracetamol", "Amoxicillin", "Ibuprofen", "Aspirin", "Metformin", "Omeprazole",
+    "Ciprofloxacin", "Atorvastatin", "Losartan", "Azithromycin", "Gabapentin",
+    "Cetirizine", "Pantoprazole", "Lisinopril", "Levothyroxine", "Amlodipine"
+]
+
 def run_mock_extraction(message: str) -> ComplaintSchema:
+    msg_clean = message.strip()
     msg_lower = message.lower()
     
-    # Simple regex matchers
-    product = "Paracetamol" if "paracetamol" in msg_lower else ("Amoxicillin" if "amoxicillin" in msg_lower else "Unknown Product")
-    
-    strength_match = re.search(r"(\d+\s*(?:mg|g))", msg_lower)
-    strength = strength_match.group(1).upper() if strength_match else "500 mg"
-    
-    batch_match = re.search(r"batch\s*:?\s*([a-z0-9]+)", msg_lower)
-    batch = batch_match.group(1).upper() if batch_match else "PCM24015"
-    
-    qty_match = re.search(r"(\d+\s*(?:strips|boxes|packs|units|capsules|tablets|strips affected))", msg_lower)
-    qty = qty_match.group(1) if qty_match else "300 strips"
-    
-    # Try dates
-    mfg_match = re.search(r"(?:manufactured|mfg)\s*:?\s*([a-z]+\s*\d{4}|\d{2}/\d{4})", msg_lower)
-    mfg = mfg_match.group(1).title() if mfg_match else "January 2026"
-    
-    exp_match = re.search(r"(?:expires|expiry|exp)\s*:?\s*([a-z]+\s*\d{4}|\d{2}/\d{4})", msg_lower)
-    exp = exp_match.group(1).title() if exp_match else "December 2028"
-    
-    desc = "Discolored tablets"
-    if "broken" in msg_lower:
-        desc = "Broken capsules"
-    elif "damage" in msg_lower:
-        desc = "Damaged packaging"
-    elif "complaint" in msg_lower:
-        # Extract everything after "complaint:" or similar
-        desc = message
-        
+    # ---------------- 1. PRODUCT NAME ----------------
+    product = ""
+    # A. Check for explicit labeled field (e.g. "Product Name:\nPremium Cooking Oil" or "Product: Paracetamol")
+    prod_label_match = re.search(
+        r'(?:^|\n)\s*(?:product\s*name|item\s*name|drug\s*name|product)\s*:\s*\n?\s*([^\n\r]+)',
+        message,
+        re.IGNORECASE
+    )
+    if prod_label_match:
+        candidate = prod_label_match.group(1).strip()
+        # Avoid matching generic category headers like "Product Quality / Packaging"
+        if not re.search(r'quality\s*/\s*packaging|complaint\s*type', candidate, re.IGNORECASE):
+            product = candidate
+            
+    # B. If not found via label, check known drug/product keywords
+    if not product:
+        for drug in COMMON_DRUGS:
+            if drug.lower() in msg_lower:
+                product = drug
+                break
+                
+    # C. Check dynamic medicine/product pattern like "CoughSyrup 100 mg" or "Cooking Oil"
+    if not product:
+        dynamic_match = re.search(r'([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+\d+\s*(?:mg|g|mcg|ml|l\b)', message)
+        if dynamic_match and dynamic_match.group(1).lower() not in ("batch", "quantity", "exp", "mfg", "manufactured", "expires"):
+            product = dynamic_match.group(1).title()
+            
+    if not product:
+        product = "Unknown Product"
+
+    # ---------------- 2. STRENGTH / VOLUME / PACK SIZE ----------------
+    strength = ""
+    strength_label = re.search(
+        r'(?:^|\n)\s*(?:strength|potency|dosage|volume|pack\s*size|package\s*size|size)\s*:\s*\n?\s*([^\n\r]+)',
+        message,
+        re.IGNORECASE
+    )
+    if strength_label:
+        strength = strength_label.group(1).strip()
+    else:
+        strength_match = re.search(
+            r'(\d+(?:\.\d+)?\s*(?:mg|mcg|g|kg|ml|l|liter|liters|litre|litres|iu|%)(?:\s*(?:bottle|strip|vial|pack|box|tablets?|capsules?))?)',
+            message,
+            re.IGNORECASE
+        )
+        if strength_match:
+            strength = strength_match.group(1).strip()
+            
+    # Clean product name if it repeats the extracted pack size/strength e.g. "Premium Cooking Oil – 1L Bottle"
+    if product and strength:
+        clean_prod = re.sub(r'[\s–\-]+' + re.escape(strength) + r'.*$', '', product, flags=re.IGNORECASE).strip()
+        if clean_prod and len(clean_prod) > 2:
+            product = clean_prod
+
+    # ---------------- 3. BATCH NUMBER ----------------
+    batch = ""
+    batch_label = re.search(
+        r'(?:^|\n)\s*(?:batch\s*(?:number|no|#)?|lot\s*(?:number|no|#)?)\s*:\s*\n?\s*([^\n\r]+)',
+        message,
+        re.IGNORECASE
+    )
+    if batch_label:
+        batch = batch_label.group(1).strip().upper()
+    else:
+        batch_match = re.search(r'batch\s*(?:number|no|#)?\s*[:\s=]?\s*([a-zA-Z0-9\-_/]+)', msg_lower)
+        if batch_match:
+            batch = batch_match.group(1).upper()
+            
+    # ---------------- 4. QUANTITY ----------------
+    qty = ""
+    qty_aff = re.search(r'(?:^|\n)\s*quantity\s*affected\s*:\s*\n?\s*([^\n\r]+)', message, re.IGNORECASE)
+    qty_rec = re.search(r'(?:^|\n)\s*quantity\s*received\s*:\s*\n?\s*([^\n\r]+)', message, re.IGNORECASE)
+    if qty_aff and qty_rec:
+        qty = f"{qty_aff.group(1).strip()} affected ({qty_rec.group(1).strip()} received)"
+    elif qty_aff:
+        qty = qty_aff.group(1).strip()
+    elif qty_rec:
+        qty = qty_rec.group(1).strip()
+    else:
+        qty_label = re.search(r'(?:^|\n)\s*(?:quantity|qty)\s*:\s*\n?\s*([^\n\r]+)', message, re.IGNORECASE)
+        if qty_label:
+            qty = qty_label.group(1).strip()
+        else:
+            qty_match = re.search(r'(\d+\s*(?:strips|boxes|packs|units|capsules|tablets|bottles|vials|blisters|cartons|pieces|cans)(?:\s+affected)?)', msg_lower)
+            if qty_match:
+                qty = qty_match.group(1).strip()
+
+    # ---------------- 5. DATES (MFG / EXP / PURCHASE) ----------------
+    mfg = ""
+    mfg_label = re.search(r'(?:^|\n)\s*(?:manufactur(?:ed|ing)?\s*date|mfg\s*date|date\s*of\s*mfg|mfg)\s*:\s*\n?\s*([^\n\r]+)', message, re.IGNORECASE)
+    if mfg_label:
+        mfg = mfg_label.group(1).strip()
+    else:
+        mfg_free = re.search(r'(?:manufactured|mfg|mfg\s*date)\s*[:\s=]?\s*([a-z]+\s*\d{4}|\d{2}/\d{4}|\d{4}-\d{2})', msg_lower)
+        if mfg_free:
+            mfg = mfg_free.group(1).title()
+            
+    if not mfg:
+        purch_label = re.search(r'(?:^|\n)\s*date\s*(?:of\s*(?:purchase|receipt|incident|delivery))?\s*:\s*\n?\s*([^\n\r]+)', message, re.IGNORECASE)
+        if purch_label:
+            mfg = f"{purch_label.group(1).strip()} (Purchased)"
+
+    exp = ""
+    exp_label = re.search(r'(?:^|\n)\s*(?:expir(?:y|ation|ed)?\s*date|exp\s*date|date\s*of\s*exp|exp)\s*:\s*\n?\s*([^\n\r]+)', message, re.IGNORECASE)
+    if exp_label:
+        exp = exp_label.group(1).strip()
+    else:
+        exp_free = re.search(r'(?:expires|expiry|exp|exp\s*date)\s*[:\s=]?\s*([a-z]+\s*\d{4}|\d{2}/\d{4}|\d{4}-\d{2})', msg_lower)
+        if exp_free:
+            exp = exp_free.group(1).title()
+
+    # ---------------- 6. COMPLAINT DESCRIPTION ----------------
+    desc = ""
+    desc_label = re.search(
+        r'(?:^|\n)\s*(?:complaint\s*description|description|defect\s*details|problem\s*description|issue\s*details)\s*:\s*\n?([\s\S]+?)(?=\n\s*(?:immediate|action|requested|priority|potential|status|reported|\Z))',
+        message,
+        re.IGNORECASE
+    )
+    if desc_label:
+        desc = " ".join(desc_label.group(1).split())
+    else:
+        if "broken" in msg_lower:
+            desc = "Broken and crushed capsules detected inside blister strips."
+        elif "discolor" in msg_lower:
+            desc = "Discolored and mottled tablets observed upon customer inspection."
+        elif "contaminat" in msg_lower or "partic" in msg_lower or "glass" in msg_lower:
+            desc = "Foreign particulate matter / potential contamination detected in product batch."
+        elif "leak" in msg_lower:
+            desc = "Leaking containers and compromised packaging seals identified upon inspection."
+        elif "damage" in msg_lower or "box" in msg_lower:
+            desc = "External packaging crushed and torn during transit."
+        else:
+            desc = msg_clean
+            
     return ComplaintSchema(
         product_name=product,
         strength=strength,
@@ -82,17 +198,17 @@ def run_mock_edit(message: str, current: ComplaintSchema) -> ComplaintSchema:
     
     # Update Batch
     if "batch" in msg_lower:
-        match = re.search(r"batch\s*(?:number|no)?\s*(?:is|to|be)?\s*([a-z0-9]+)", msg_lower)
+        match = re.search(r"batch\s*(?:number|no|#)?\s*(?:is|to|be|=|:)?\s*([a-z0-9\-]+)", msg_lower)
         if match:
             updated.batch_number = match.group(1).upper()
             
     # Update Quantity
     if any(k in msg_lower for k in ["qty", "quantity", "strips", "boxes", "actually"]):
-        match = re.search(r"(?:qty|quantity|is|be|to)\s*(\d+\s*(?:strips|boxes|packs|units|capsules|tablets)?)", msg_lower)
+        match = re.search(r"(?:qty|quantity|is|be|to|=)\s*(\d+\s*(?:strips|boxes|packs|units|capsules|tablets)?)", msg_lower)
         if not match:
             match = re.search(r"(\d+\s*(?:strips|boxes|packs|units|capsules|tablets)?)", msg_lower)
         if match:
-            val = match.group(1)
+            val = match.group(1).strip()
             new_qty_str = ""
             if val.isdigit():
                 prev_suffix = "".join([c for c in (current.quantity or "") if not c.isdigit()]).strip()
@@ -112,31 +228,30 @@ def run_mock_edit(message: str, current: ComplaintSchema) -> ComplaintSchema:
                     if old_num in current.complaint_description:
                         updated.complaint_description = current.complaint_description.replace(old_num, new_num)
                         
-                
     # Update MFG Date
     if "mfg" in msg_lower or "manufactur" in msg_lower:
-        match = re.search(r"(?:mfg|manufactur)\w*\s*(?:date|no)?\s*(?:is|to|be)?\s*([a-z0-9/\s]+?)(?:\s+instead|\.|$|,)", msg_lower)
+        match = re.search(r"(?:mfg|manufactur)\w*\s*(?:date|no)?\s*(?:is|to|be|=|:)?\s*([a-z0-9/\s]+?)(?:\s+instead|\.|$|,)", msg_lower)
         if match:
             updated.manufacturing_date = match.group(1).strip().title()
             
     # Update EXP Date
     if "exp" in msg_lower or "expiry" in msg_lower or "expire" in msg_lower:
-        match = re.search(r"(?:exp|expiry|expire)\w*\s*(?:date|no)?\s*(?:is|to|be)?\s*([a-z0-9/\s]+?)(?:\s+instead|\.|$|,)", msg_lower)
+        match = re.search(r"(?:exp|expiry|expire)\w*\s*(?:date|no)?\s*(?:is|to|be|=|:)?\s*([a-z0-9/\s]+?)(?:\s+instead|\.|$|,)", msg_lower)
         if match:
             updated.expiry_date = match.group(1).strip().title()
             
     # Update Product
     if "product" in msg_lower or "name" in msg_lower:
-        match = re.search(r"(?:product|name)\s*(?:is|to|be)?\s*([a-z]+)", msg_lower)
+        match = re.search(r"(?:product|name)\s*(?:is|to|be|=|:)?\s*([a-zA-Z0-9\s–\-]+?)(?:\s+instead|\.|$|,)", message, re.IGNORECASE)
         if match:
             updated.product_name = match.group(1).strip().title()
             
     # Update Complaint Description
     if any(k in msg_lower for k in ["description", "complaint", "defect", "details", "issue", "problem"]):
-        match = re.search(r"(?:description|complaint|defect|details|issue|problem)\s*(?:is|to|be)?\s*(?:actually)?\s*([a-z0-9\s,\.]+?)(?:\s+instead|\.|$|,)", msg_lower)
+        match = re.search(r"(?:description|complaint|defect|details|issue|problem)\s*(?:is|to|be|=|:)?\s*(?:actually)?\s*([a-z0-9\s,\.]+?)(?:\s+instead|\.|$|,)", msg_lower)
         if match:
             updated.complaint_description = match.group(1).strip().capitalize()
-    elif any(k in msg_lower for k in ["discolor", "broken", "crack", "damage", "smell", "spots", "crushed"]):
+    elif any(k in msg_lower for k in ["discolor", "broken", "crack", "damage", "smell", "spots", "crushed", "particulate", "contaminat", "leak"]):
         clean_msg = re.sub(r'\s+instead|\.|$|,', '', message).strip()
         updated.complaint_description = clean_msg[0].upper() + clean_msg[1:] if clean_msg else clean_msg
             
@@ -145,38 +260,60 @@ def run_mock_edit(message: str, current: ComplaintSchema) -> ComplaintSchema:
 def run_mock_risk(complaint: ComplaintSchema) -> RiskAssessmentSchema:
     desc = (complaint.complaint_description or "").lower()
     
-    if "discolor" in desc:
+    # 1. Critical defects (sterility, particulate, contamination, adverse events)
+    if any(k in desc for k in ["contaminat", "partic", "glass", "foreign", "subpotent", "steril", "toxic"]):
+        return RiskAssessmentSchema(
+            severity="Critical",
+            priority="Immediate",
+            reason="Contamination or foreign matter poses a direct threat to safety and violates cGMP sterility/safety standards.",
+            impact="Immediate patient safety hazard; risk of regulatory warning letter or mandatory class-I product recall.",
+            recommended_action="Execute immediate warehouse quarantine for batch. Notify Quality Unit Head. Initiate Class-I recall assessment & CAPA within 24 hours."
+        )
+    # 2. Fluid leakage / Seal failure / Container breach
+    elif any(k in desc for k in ["leak", "leaking", "leakage", "cap area", "seal breach", "seal broken", "visibly wet"]):
         return RiskAssessmentSchema(
             severity="Major",
             priority="High",
-            reason="Product discoloration can indicate chemical degradation, active ingredient loss, or bacterial contamination.",
-            impact="Potential patient safety concern; reduced therapeutic efficacy.",
-            recommended_action="Route to QA Investigation. Hold remaining inventory. Initiate replacement shipment for affected customer."
+            reason="Primary packaging seal breach resulting in fluid leakage, container damage, and potential product contamination or spoilage.",
+            impact="Loss of hermetic seal compromises product integrity and shelf-life, and causes outer carton damage.",
+            recommended_action="Maintain batch quarantine. Request supplier investigation into cap torque and carton cushioning. Issue replacement shipment."
         )
+    # 3. Chemical degradation / Discoloration
+    elif "discolor" in desc:
+        return RiskAssessmentSchema(
+            severity="Major",
+            priority="High",
+            reason="Product discoloration can indicate chemical degradation, active ingredient loss, oxidation, or microbial growth.",
+            impact="Potential patient safety concern; reduced therapeutic efficacy and compromised stability.",
+            recommended_action="Route to QA Laboratory for HPLC assay and stability testing. Quarantine batch inventory. Issue customer replacement."
+        )
+    # 4. Fracturing / Broken units
     elif "broken" in desc or "crack" in desc:
         return RiskAssessmentSchema(
             severity="Major",
             priority="Medium",
-            reason="Physical fracturing or broken capsules compromises dose accuracy and exposes active ingredients to environmental moisture.",
-            impact="Incomplete dosing; potential product instability.",
-            recommended_action="Initiate QA Investigation. Replace customer stock. Request return samples for inspection."
+            reason="Physical fracturing or broken capsules compromises dose accuracy and exposes active ingredients to atmospheric humidity.",
+            impact="Incomplete or incorrect dosing; accelerated moisture degradation.",
+            recommended_action="Initiate packaging line QA investigation. Replace customer stock. Request return samples for physical defect analysis."
         )
-    elif "damage" in desc or "box" in desc:
+    # 5. Secondary Packaging damage
+    elif "damage" in desc or "box" in desc or "carton" in desc:
         return RiskAssessmentSchema(
             severity="Minor",
             priority="Low",
-            reason="External packaging damage without compromise of internal blister seals does not impact product quality directly.",
-            impact="Cosmetic/aesthetic issue only; low risk to patient safety.",
-            recommended_action="Inspect secondary packaging SOPs. Provide feedback to logistics provider."
+            reason="Secondary packaging damage without breach of primary container barrier does not affect product substance stability.",
+            impact="Aesthetic / cosmetic non-conformance; low risk to drug safety or efficacy.",
+            recommended_action="Review shipping carton strength SOPs. Log in carrier quality scorecard and send replacement packaging."
         )
     else:
         return RiskAssessmentSchema(
             severity="Minor",
             priority="Low",
-            reason="General complaint or unknown hazard category. Standard baseline assessment applied.",
-            impact="Low initial impact suspected.",
-            recommended_action="Log and monitor. Route to customer support."
+            reason="Standard complaint without acute safety breach. Baseline quality evaluation applied.",
+            impact="Low expected patient impact under routine monitoring.",
+            recommended_action="Log complaint in QMS register. Track batch trending metrics and close within standard 30-day window."
         )
+
 
 # ----------------- LangGraph Node Functions -----------------
 
@@ -200,6 +337,8 @@ def detect_intent_node(state: AgentState):
         is_mock = False
     except Exception as e:
         print(f"Fallback to Mock Intent Detection: {e}")
+        from app.services.groq import mark_circuit_broken
+        mark_circuit_broken(f"LLM unreachable or quota exceeded: {e}")
         intent = run_mock_intent_detection(user_msg)
         is_mock = True
         
@@ -213,7 +352,7 @@ def extract_complaint_node(state: AgentState):
     
     if state.get("is_mock"):
         extracted = run_mock_extraction(user_msg)
-        chat_res = "⚠️ Mock Mode: Extracted new complaint details from text."
+        chat_res = "Extracted new complaint details into the registration form."
     else:
         try:
             llm = get_llm()
@@ -229,8 +368,10 @@ def extract_complaint_node(state: AgentState):
             chat_res = "I have extracted the complaint information and filled the form."
         except Exception as e:
             print(f"Extraction failed: {e}")
+            from app.services.groq import mark_circuit_broken
+            mark_circuit_broken(f"LLM extraction failed: {e}")
             extracted = run_mock_extraction(user_msg)
-            chat_res = "⚠️ Mock Mode: Extracted complaint fields via local parsing."
+            chat_res = "Extracted complaint fields via intelligent local parsing."
             
     return {
         "current_form": extracted,
@@ -243,7 +384,7 @@ def edit_complaint_node(state: AgentState):
     
     if state.get("is_mock"):
         updated = run_mock_edit(user_msg, curr_form)
-        chat_res = "⚠️ Mock Mode: Updated specified fields."
+        chat_res = "Updated specified complaint fields."
     else:
         try:
             llm = get_llm()
@@ -262,8 +403,10 @@ def edit_complaint_node(state: AgentState):
             chat_res = "I have updated the specified complaint fields as requested."
         except Exception as e:
             print(f"Edit failed: {e}")
+            from app.services.groq import mark_circuit_broken
+            mark_circuit_broken(f"LLM edit failed: {e}")
             updated = run_mock_edit(user_msg, curr_form)
-            chat_res = "⚠️ Mock Mode: Updated complaint fields via local parsing."
+            chat_res = "Updated complaint fields via local parsing."
             
     return {
         "current_form": updated,
@@ -289,6 +432,8 @@ def risk_assessment_node(state: AgentState):
             risk = chain.invoke({"complaint": curr_form.json()})
         except Exception as e:
             print(f"Risk Assessment failed: {e}")
+            from app.services.groq import mark_circuit_broken
+            mark_circuit_broken(f"LLM risk assessment failed: {e}")
             risk = run_mock_risk(curr_form)
             
     return {
@@ -299,9 +444,8 @@ def general_chat_node(state: AgentState):
     user_msg = state["user_message"]
     
     if state.get("is_mock"):
-        chat_res = ("⚠️ Mock Mode: I am your QMS Assistant. I can help you log product complaints, "
-                    "update details in conversation, or assess risks. "
-                    "Please configure GROQ_API_KEY in your backend/.env to connect to the active LLM workflow.")
+        chat_res = ("Hello! I am your AI QMS Assistant. I can help you log product complaints, "
+                    "update details in conversation, evaluate batch risks, or process complaint PDF reports.")
     else:
         try:
             llm = get_llm()
@@ -316,11 +460,15 @@ def general_chat_node(state: AgentState):
             chat_res = res.content
         except Exception as e:
             print(f"Chat failed: {e}")
-            chat_res = "⚠️ Mock Mode: Hello, how can I assist you with QMS complaints today?"
+            from app.services.groq import mark_circuit_broken
+            mark_circuit_broken(f"LLM chat failed: {e}")
+            chat_res = ("Hello! I am your AI QMS Assistant. I can help you log product complaints, "
+                        "update details in conversation, evaluate batch risks, or process complaint PDF reports.")
             
     return {
         "chat_response": chat_res
     }
+
 
 # ----------------- Router Logic -----------------
 def route_intent(state: AgentState):

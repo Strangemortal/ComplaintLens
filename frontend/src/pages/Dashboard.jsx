@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchComplaintsList } from '../redux/complaintSlice';
-import { Search, Trash2, ClipboardList, ShieldCheck, AlertCircle, RefreshCw } from 'lucide-react';
+import { fetchComplaintsList, loadComplaintRecord, deleteComplaintFromDb } from '../redux/complaintSlice';
+import { Search, Trash2, ClipboardList, ShieldCheck, AlertCircle, RefreshCw, Eye } from 'lucide-react';
 
-export default function Dashboard() {
+export default function Dashboard({ onSwitchTab, onShowToast }) {
   const dispatch = useDispatch();
   const { complaintsList, loading } = useSelector((state) => state.complaints);
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,23 +12,36 @@ export default function Dashboard() {
     dispatch(fetchComplaintsList());
   }, [dispatch]);
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this complaint record from the database?')) {
-      return;
-    }
-    try {
-      const response = await fetch(`http://localhost:8000/api/complaints/${id}`, {
-        method: 'DELETE',
-      });
-      if (response.ok) {
-        dispatch(fetchComplaintsList());
-      } else {
-        alert('Failed to delete complaint record.');
-      }
-    } catch (err) {
-      alert(`Error deleting record: ${err.message}`);
+  const handleInspect = (complaint) => {
+    dispatch(loadComplaintRecord(complaint));
+    if (onSwitchTab) {
+      onSwitchTab('logger');
     }
   };
+
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await dispatch(deleteComplaintFromDb(deleteTarget.id)).unwrap();
+      if (onShowToast) {
+        onShowToast(`Complaint #${deleteTarget.id} successfully removed from QMS database.`);
+      }
+      setDeleteTarget(null);
+    } catch (err) {
+      if (onShowToast) {
+        onShowToast(`Failed to delete record: ${err}`, 'error');
+      }
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+
+
 
   // Filter complaints
   const filteredComplaints = complaintsList.filter((c) => {
@@ -195,27 +208,87 @@ export default function Dashboard() {
                     </td>
                     <td>{formatDate(c.created_at)}</td>
                     <td>
-                      <button
-                        onClick={() => handleDelete(c.id)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          opacity: 0.8,
-                        }}
-                        title="Delete Record"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <div className="table-actions-cell">
+                        <button
+                          onClick={() => handleInspect(c)}
+                          className="table-action-btn inspect-btn"
+                          title={`Inspect Record #${c.id}`}
+                          aria-label={`Inspect Record #${c.id}`}
+                        >
+                          <Eye size={15} />
+                          <span>Inspect</span>
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(c)}
+                          className="table-action-btn delete-btn"
+                          title={`Delete Record #${c.id}`}
+                          aria-label={`Delete Record #${c.id}`}
+                        >
+                          <Trash2 size={15} />
+                          <span>Delete</span>
+                        </button>
+                      </div>
                     </td>
                   </tr>
+
                 ))}
               </tbody>
             </table>
           )}
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="modal-backdrop" onClick={() => !isDeleting && setDeleteTarget(null)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <div className="modal-icon-danger">
+                <Trash2 size={22} />
+              </div>
+              <div>
+                <h3>Delete Complaint Record</h3>
+                <p>This action will permanently delete the record and its risk assessment.</p>
+              </div>
+            </div>
+            <div className="modal-body">
+              Are you sure you want to permanently delete record <strong>#{deleteTarget.id}</strong> (
+              <span style={{ color: 'var(--color-primary-light)', fontWeight: '600' }}>
+                {deleteTarget.product_name || 'Unnamed Product'}
+              </span>
+              {deleteTarget.batch_number ? ` - Batch: ${deleteTarget.batch_number}` : ''}) from the QMS database?
+            </div>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-cancel"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-danger"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw size={14} className="spinner" />
+                    <span>Deleting...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Confirm Delete</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

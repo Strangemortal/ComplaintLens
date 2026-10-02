@@ -8,12 +8,12 @@ import { AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('logger');
-  const [toastMessage, setToastMessage] = useState(null);
+  const [toast, setToast] = useState(null);
 
-  const triggerToast = (msg) => {
-    setToastMessage(msg);
+  const triggerToast = (msg, type = 'success') => {
+    setToast({ message: msg, type });
     setTimeout(() => {
-      setToastMessage(null);
+      setToast(null);
     }, 4000);
   };
 
@@ -28,7 +28,7 @@ export default function App() {
             <RiskAssessment />
           </div>
         ) : (
-          <Dashboard />
+          <Dashboard onSwitchTab={setActiveTab} onShowToast={triggerToast} />
         )}
       </main>
 
@@ -36,12 +36,17 @@ export default function App() {
       <AIChat />
 
       {/* Toast Notification */}
-      {toastMessage && (
-        <div className="toast">
-          <CheckCircle size={18} style={{ color: '#10b981' }} />
-          <span>{toastMessage}</span>
+      {toast && (
+        <div className={`toast ${toast.type === 'error' ? 'toast-error' : ''}`}>
+          {toast.type === 'error' ? (
+            <AlertCircle size={18} style={{ color: '#ef4444' }} />
+          ) : (
+            <CheckCircle size={18} style={{ color: '#10b981' }} />
+          )}
+          <span>{toast.message}</span>
         </div>
       )}
     </div>
   );
 }
+

@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { sendChatMessage } from '../redux/complaintSlice';
+import { clearChat } from '../redux/chatSlice';
 import ChatMessage from './ChatMessage';
 import DocumentUploader from './DocumentUploader';
-import { Send, Bot, Minus, MessageSquare } from 'lucide-react';
+import { Send, Bot, Minus, MessageSquare, RotateCcw } from 'lucide-react';
+
 
 export default function AIChat() {
   const dispatch = useDispatch();
@@ -137,10 +139,17 @@ export default function AIChat() {
             AI QMS Co-Pilot
           </h2>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-dark)', fontWeight: '600', pointerEvents: 'none' }}>
             ONLINE
           </span>
+          <button
+            className="chat-close-btn"
+            onClick={() => dispatch(clearChat())}
+            title="Reset Chat Session"
+          >
+            <RotateCcw size={14} />
+          </button>
           <button
             className="chat-close-btn"
             onClick={() => setIsCollapsed(true)}
@@ -151,6 +160,7 @@ export default function AIChat() {
         </div>
       </div>
 
+
       <div className="chat-messages" style={{ padding: '1rem' }}>
         {messages.map((msg, index) => (
           <ChatMessage key={index} message={msg} />
@@ -158,7 +168,43 @@ export default function AIChat() {
         <div ref={messagesEndRef} />
       </div>
 
-      <div className="chat-input-bar" style={{ padding: '0.75rem 1rem' }}>
+      {/* Quick Prompt Suggestions */}
+      <div className="chat-quick-chips">
+        <button
+          className="quick-chip"
+          disabled={loading}
+          onClick={() => dispatch(sendChatMessage("A pharmacy reported that Paracetamol 500 mg tablets from batch PCM24015 are discolored. Around 300 strips are affected. Manufactured January 2026 and expires December 2028."))}
+          title="Extract Discolored Paracetamol complaint"
+        >
+          💊 Paracetamol Discolored
+        </button>
+        <button
+          className="quick-chip"
+          disabled={loading}
+          onClick={() => dispatch(sendChatMessage("Quality alert: Customer identified particulate contamination in Amoxicillin 250 mg bottles, batch AMX-9901, 150 units affected."))}
+          title="Extract Critical particulate complaint"
+        >
+          ⚠️ Contamination (Critical)
+        </button>
+        <button
+          className="quick-chip"
+          disabled={loading}
+          onClick={() => dispatch(sendChatMessage("Batch number is PCM24099 instead."))}
+          title="Update batch number"
+        >
+          ✏️ Edit Batch
+        </button>
+        <button
+          className="quick-chip"
+          disabled={loading}
+          onClick={() => dispatch(sendChatMessage("Quantity is actually 850 strips."))}
+          title="Update quantity"
+        >
+          🔢 Edit Qty
+        </button>
+      </div>
+
+      <div className="chat-input-bar" style={{ padding: '0.65rem 1rem' }}>
         <div className="chat-input-wrapper">
           <input
             type="text"
@@ -185,3 +231,4 @@ export default function AIChat() {
     </div>
   );
 }
+

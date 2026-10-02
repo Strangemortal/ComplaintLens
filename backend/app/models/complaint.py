@@ -14,7 +14,8 @@ class Complaint(Base):
     expiry_date = Column(String(100), nullable=True)
     quantity = Column(String(100), nullable=True)
     complaint_description = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
 
     risk_assessment = relationship("RiskAssessment", back_populates="complaint", uselist=False, cascade="all, delete-orphan")
 

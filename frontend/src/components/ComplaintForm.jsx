@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { saveComplaintToDb } from '../redux/complaintSlice';
-import { FileText, Database } from 'lucide-react';
+import { saveComplaintToDb, updateFormField, clearActiveComplaint } from '../redux/complaintSlice';
+import { FileText, Database, RotateCcw } from 'lucide-react';
 
 export default function ComplaintForm({ onShowToast }) {
   const dispatch = useDispatch();
@@ -31,6 +31,14 @@ export default function ComplaintForm({ onShowToast }) {
     prevForm.current = form;
   }, [form]);
 
+  const handleInputChange = (field, value) => {
+    dispatch(updateFormField({ field, value }));
+  };
+
+  const handleClear = () => {
+    dispatch(clearActiveComplaint());
+  };
+
   const handleSave = () => {
     dispatch(saveComplaintToDb({ form, risk }))
       .unwrap()
@@ -38,8 +46,9 @@ export default function ComplaintForm({ onShowToast }) {
         onShowToast('Complaint logged and saved in QMS Database successfully!');
       })
       .catch((err) => {
-        alert(`Failed to save complaint: ${err}`);
+        onShowToast(`Failed to save complaint: ${err}`, 'error');
       });
+
   };
 
   const isFormEmpty = !form.product_name && !form.complaint_description;
@@ -51,9 +60,29 @@ export default function ComplaintForm({ onShowToast }) {
           <FileText size={20} className="icon-blue" />
           Complaint Registration Form
         </h2>
-        <span style={{ fontSize: '0.8rem', color: 'var(--text-dark)', fontWeight: '600', textTransform: 'uppercase' }}>
-          AI Controlled
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-light)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Interactive & AI Synced
+          </span>
+          {!isFormEmpty && (
+            <button
+              onClick={handleClear}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+                fontSize: '0.8rem',
+              }}
+              title="Clear Form"
+            >
+              <RotateCcw size={14} /> Clear
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="form-content">
@@ -64,8 +93,9 @@ export default function ComplaintForm({ onShowToast }) {
             type="text"
             className={`form-input ${flash.product_name ? 'flash-updated' : ''}`}
             value={form.product_name || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('product_name', e.target.value)}
+            disabled={loading}
+            placeholder="e.g. Paracetamol"
           />
         </div>
 
@@ -76,8 +106,9 @@ export default function ComplaintForm({ onShowToast }) {
             type="text"
             className={`form-input ${flash.strength ? 'flash-updated' : ''}`}
             value={form.strength || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('strength', e.target.value)}
+            disabled={loading}
+            placeholder="e.g. 500 mg"
           />
         </div>
 
@@ -88,8 +119,9 @@ export default function ComplaintForm({ onShowToast }) {
             type="text"
             className={`form-input ${flash.batch_number ? 'flash-updated' : ''}`}
             value={form.batch_number || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('batch_number', e.target.value)}
+            disabled={loading}
+            placeholder="e.g. PCM24015"
           />
         </div>
 
@@ -100,8 +132,9 @@ export default function ComplaintForm({ onShowToast }) {
             type="text"
             className={`form-input ${flash.quantity ? 'flash-updated' : ''}`}
             value={form.quantity || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('quantity', e.target.value)}
+            disabled={loading}
+            placeholder="e.g. 300 strips"
           />
         </div>
 
@@ -112,8 +145,9 @@ export default function ComplaintForm({ onShowToast }) {
             type="text"
             className={`form-input ${flash.manufacturing_date ? 'flash-updated' : ''}`}
             value={form.manufacturing_date || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('manufacturing_date', e.target.value)}
+            disabled={loading}
+            placeholder="e.g. January 2026"
           />
         </div>
 
@@ -124,8 +158,9 @@ export default function ComplaintForm({ onShowToast }) {
             type="text"
             className={`form-input ${flash.expiry_date ? 'flash-updated' : ''}`}
             value={form.expiry_date || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('expiry_date', e.target.value)}
+            disabled={loading}
+            placeholder="e.g. December 2028"
           />
         </div>
 
@@ -135,13 +170,15 @@ export default function ComplaintForm({ onShowToast }) {
             id="complaint_description"
             className={`form-input form-textarea ${flash.complaint_description ? 'flash-updated' : ''}`}
             value={form.complaint_description || ''}
-            disabled
-            placeholder="Awaiting AI extraction..."
+            onChange={(e) => handleInputChange('complaint_description', e.target.value)}
+            disabled={loading}
+            placeholder="Describe defect details or let AI extract from chat/PDF..."
+            rows={3}
           />
         </div>
       </div>
 
-      <div className="form-footer">
+      <div className="form-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
         <button
           className="btn btn-primary"
           disabled={isFormEmpty || loading}
@@ -154,3 +191,4 @@ export default function ComplaintForm({ onShowToast }) {
     </div>
   );
 }
+
