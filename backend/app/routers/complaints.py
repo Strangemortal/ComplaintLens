@@ -36,7 +36,8 @@ def create_complaint(data: ComplaintCreate, db: Session = Depends(get_db)):
         )
         db.add(new_risk)
         db.commit()
-        db.refresh(new_complaint) # to load relation
+        db.refresh(new_risk)   # refresh risk first so relationship is loaded
+        db.refresh(new_complaint)  # now complaint.risk_assessment is populated
         
         return new_complaint
     except Exception as e:

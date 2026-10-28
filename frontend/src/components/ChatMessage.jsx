@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, User, AlertCircle } from 'lucide-react';
+import { Bot, User, Zap } from 'lucide-react';
 
 export default function ChatMessage({ message }) {
   const isAssistant = message.role === 'assistant';
@@ -7,17 +7,23 @@ export default function ChatMessage({ message }) {
   return (
     <div className={`message-wrapper ${isAssistant ? 'assistant' : 'user'}`}>
       <div className="message-bubble">
-        <p style={{ whiteSpace: 'pre-line', fontSize: '0.95rem' }}>{message.content}</p>
+        <p style={{ whiteSpace: 'pre-line', fontSize: '0.93rem', lineHeight: '1.5' }}>{message.content}</p>
         <div className="message-info">
           {isAssistant ? (
             <>
-              <Bot size={12} />
-              <span>Co-Pilot</span>
-              {message.is_mock && <span className="mock-badge">Mock Mode</span>}
+              <Bot size={13} className="icon-blue" />
+              <span style={{ fontWeight: '600' }}>AI Co-Pilot</span>
+              {message.is_mock ? (
+                <span className="mock-badge">Mock Rules</span>
+              ) : (
+                <span className="live-ai-badge">
+                  <Zap size={10} /> Groq AI
+                </span>
+              )}
             </>
           ) : (
             <>
-              <User size={12} />
+              <User size={13} />
               <span>You</span>
             </>
           )}

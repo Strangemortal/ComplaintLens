@@ -48,6 +48,24 @@ def health_check():
         "database": str(engine.url)
     }
 
+@app.get("/api/health")
+def llm_health():
+    """Reports live LLM status — used by frontend to show AI status badge."""
+    from app.services.groq import get_status
+    llm_status = get_status()
+    return {
+        "status": "healthy",
+        "service": "QMS Complaint Co-Pilot API",
+        "llm": llm_status
+    }
+
+@app.post("/api/chat/reset-circuit")
+def reset_circuit_breaker():
+    """Resets the LLM circuit breaker so live AI resumes without server restart."""
+    from app.services.groq import reset_circuit
+    reset_circuit()
+    return {"status": "ok", "message": "Circuit breaker reset. LLM will be retried on next request."}
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))

@@ -41,7 +41,8 @@ def run_mock_intent_detection(message: str) -> str:
 COMMON_DRUGS = [
     "Paracetamol", "Amoxicillin", "Ibuprofen", "Aspirin", "Metformin", "Omeprazole",
     "Ciprofloxacin", "Atorvastatin", "Losartan", "Azithromycin", "Gabapentin",
-    "Cetirizine", "Pantoprazole", "Lisinopril", "Levothyroxine", "Amlodipine"
+    "Cetirizine", "Pantoprazole", "Lisinopril", "Levothyroxine", "Amlodipine",
+    "Ceftriaxone", "Meropenem", "Vancomycin", "Piperacillin", "Doxycycline"
 ]
 
 def run_mock_extraction(message: str) -> ComplaintSchema:
@@ -71,12 +72,17 @@ def run_mock_extraction(message: str) -> ComplaintSchema:
                 
     # C. Check dynamic medicine/product pattern like "CoughSyrup 100 mg" or "Cooking Oil"
     if not product:
-        dynamic_match = re.search(r'([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+\d+\s*(?:mg|g|mcg|ml|l\b)', message)
-        if dynamic_match and dynamic_match.group(1).lower() not in ("batch", "quantity", "exp", "mfg", "manufactured", "expires"):
-            product = dynamic_match.group(1).title()
+        dynamic_match = re.search(r'(?:of\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)?)\s+\d+\s*(?:mg|g|mcg|ml|l\b)', message, re.IGNORECASE)
+        if dynamic_match:
+            candidate = dynamic_match.group(1).strip()
+            candidate = re.sub(r'^(?:of|for|with)\s+', '', candidate, flags=re.IGNORECASE).strip()
+            if candidate.lower() not in ("batch", "quantity", "exp", "mfg", "manufactured", "expires"):
+                product = candidate.title()
             
     if not product:
         product = "Unknown Product"
+    else:
+        product = re.sub(r'^(?:of|for|with)\s+', '', product, flags=re.IGNORECASE).strip()
 
     # ---------------- 2. STRENGTH / VOLUME / PACK SIZE ----------------
     strength = ""
@@ -358,13 +364,29 @@ def extract_complaint_node(state: AgentState):
             llm = get_llm()
             structured_llm = llm.with_structured_output(ComplaintSchema)
             prompt = ChatPromptTemplate.from_messages([
-                ("system", "You are a QMS extraction assistant. Extract complaint information into the fields. "
-                           "If a field cannot be found, leave it as null. Do not hallucinate values. "
-                           "Fields to extract: Product Name, Strength, Batch Number, Manufacturing Date, Expiry Date, Quantity, Complaint Description."),
+                ("system", "You are an expert pharmaceutical Quality Assurance (QA) intake specialist. "
+                           "Extract complaint information into structured fields following strict cGMP standards:\n"
+                           "- product_name: The brand name or generic chemical name of the drug/product (e.g. 'Ceftriaxone', 'Paracetamol', 'Amoxicillin'). "
+                           "CRITICAL: NEVER put batch numbers, lot numbers, or alphanumeric codes into product_name.\n"
+                           "- strength: Potency, volume, or dosage form (e.g. '1g', '500 mg', '100 ml').\n"
+                           "- batch_number: The alphanumeric manufacturing batch/lot code (e.g. 'CEFT-2024-99', 'PCM24015').\n"
+                           "- quantity: Number of units affected or quarantined (e.g. '80 vials', '100 strips').\n"
+                           "- manufacturing_date: Manufacturing date if mentioned (MFG).\n"
+                           "- expiry_date: Expiration date if mentioned (EXP).\n"
+                           "- complaint_description: Clear description of the defect, symptoms, or physical observations.\n\n"
+                           "If a field cannot be found, leave it as null. Never confuse or swap batch number with product name."),
                 ("user", "{message}")
             ])
             chain = prompt | structured_llm
             extracted = chain.invoke({"message": user_msg})
+            # Disambiguation guardrail: if product_name was mistakenly set to batch_number
+            if extracted.product_name and extracted.batch_number and extracted.product_name.strip().upper() == extracted.batch_number.strip().upper():
+                for drug in COMMON_DRUGS:
+                    if drug.lower() in user_msg.lower():
+                        extracted.product_name = drug
+                        break
+            if extracted.product_name:
+                extracted.product_name = re.sub(r'^(?:of|for|with)\s+', '', extracted.product_name, flags=re.IGNORECASE).strip()
             chat_res = "I have extracted the complaint information and filled the form."
         except Exception as e:
             print(f"Extraction failed: {e}")
@@ -397,7 +419,7 @@ def edit_complaint_node(state: AgentState):
             ])
             chain = prompt | structured_llm
             updated = chain.invoke({
-                "current_state": curr_form.json(),
+                "current_state": curr_form.model_dump_json(),
                 "message": user_msg
             })
             chat_res = "I have updated the specified complaint fields as requested."
@@ -429,7 +451,7 @@ def risk_assessment_node(state: AgentState):
                 ("user", "{complaint}")
             ])
             chain = prompt | structured_llm
-            risk = chain.invoke({"complaint": curr_form.json()})
+            risk = chain.invoke({"complaint": curr_form.model_dump_json()})
         except Exception as e:
             print(f"Risk Assessment failed: {e}")
             from app.services.groq import mark_circuit_broken
@@ -516,7 +538,13 @@ def run_agent_workflow(message: str, current_form: Optional[ComplaintSchema] = N
     initial_state = {
         "messages": [],
         "current_form": current_form or ComplaintSchema(),
-        "current_risk": current_risk or RiskAssessmentSchema(severity="", priority="", reason="", impact="", recommended_action=""),
+        "current_risk": current_risk or RiskAssessmentSchema(
+            severity="Pending",
+            priority="Pending",
+            reason="Awaiting complaint details.",
+            impact="Not yet assessed.",
+            recommended_action="Submit complaint to generate risk assessment."
+        ),
         "intent": "",
         "user_message": message,
         "is_mock": False,

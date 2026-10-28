@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { saveComplaintToDb, updateFormField, clearActiveComplaint } from '../redux/complaintSlice';
-import { FileText, Database, RotateCcw } from 'lucide-react';
+import { saveComplaintToDb, updateFormField, clearActiveComplaint, sendChatMessage } from '../redux/complaintSlice';
+import { FileText, Database, RotateCcw, Zap, CheckCircle2 } from 'lucide-react';
 
 export default function ComplaintForm({ onShowToast }) {
   const dispatch = useDispatch();
@@ -40,6 +40,10 @@ export default function ComplaintForm({ onShowToast }) {
   };
 
   const handleSave = () => {
+    if (!form.product_name) {
+      onShowToast('Product Name is required before saving.', 'error');
+      return;
+    }
     dispatch(saveComplaintToDb({ form, risk }))
       .unwrap()
       .then(() => {
@@ -48,10 +52,20 @@ export default function ComplaintForm({ onShowToast }) {
       .catch((err) => {
         onShowToast(`Failed to save complaint: ${err}`, 'error');
       });
+  };
 
+  const handleManualAssess = () => {
+    if (!form.product_name && !form.complaint_description) {
+      onShowToast('Please fill in at least a Product Name or Complaint Description to assess risk.', 'error');
+      return;
+    }
+    const prompt = `Assess QA risk for complaint: Product: ${form.product_name || 'Unknown'}, Batch: ${form.batch_number || 'N/A'}, Quantity: ${form.quantity || 'N/A'}, Defect: ${form.complaint_description || 'Unspecified'}`;
+    dispatch(sendChatMessage(prompt));
+    onShowToast('Requesting AI Risk Assessment...');
   };
 
   const isFormEmpty = !form.product_name && !form.complaint_description;
+  const descLength = (form.complaint_description || '').length;
 
   return (
     <div className="glass" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -61,8 +75,8 @@ export default function ComplaintForm({ onShowToast }) {
           Complaint Registration Form
         </h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--color-primary-light)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Interactive & AI Synced
+          <span style={{ fontSize: '0.75rem', color: '#60a5fa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <CheckCircle2 size={13} /> Interactive & AI Synced
           </span>
           {!isFormEmpty && (
             <button
@@ -87,7 +101,7 @@ export default function ComplaintForm({ onShowToast }) {
 
       <div className="form-content">
         <div className="form-group">
-          <label htmlFor="product_name">Product Name</label>
+          <label htmlFor="product_name">Product Name *</label>
           <input
             id="product_name"
             type="text"
@@ -100,7 +114,7 @@ export default function ComplaintForm({ onShowToast }) {
         </div>
 
         <div className="form-group">
-          <label htmlFor="strength">Strength</label>
+          <label htmlFor="strength">Strength / Dosage</label>
           <input
             id="strength"
             type="text"
@@ -126,7 +140,7 @@ export default function ComplaintForm({ onShowToast }) {
         </div>
 
         <div className="form-group">
-          <label htmlFor="quantity">Quantity</label>
+          <label htmlFor="quantity">Quantity Affected</label>
           <input
             id="quantity"
             type="text"
@@ -165,7 +179,10 @@ export default function ComplaintForm({ onShowToast }) {
         </div>
 
         <div className="form-group full-width">
-          <label htmlFor="complaint_description">Complaint Description</label>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <label htmlFor="complaint_description">Complaint Description</label>
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-dark)' }}>{descLength} characters</span>
+          </div>
           <textarea
             id="complaint_description"
             className={`form-input form-textarea ${flash.complaint_description ? 'flash-updated' : ''}`}
@@ -178,7 +195,17 @@ export default function ComplaintForm({ onShowToast }) {
         </div>
       </div>
 
-      <div className="form-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+      <div className="form-footer" style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+        <button
+          className="btn btn-secondary"
+          disabled={isFormEmpty || loading}
+          onClick={handleManualAssess}
+          title="Ask AI to evaluate QA risk severity and recommended actions based on current form fields"
+        >
+          <Zap size={15} style={{ color: '#fbbf24' }} />
+          Re-Assess Risk with AI
+        </button>
+
         <button
           className="btn btn-primary"
           disabled={isFormEmpty || loading}
@@ -191,4 +218,3 @@ export default function ComplaintForm({ onShowToast }) {
     </div>
   );
 }
-

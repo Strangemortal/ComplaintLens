@@ -10,13 +10,19 @@ class RiskAssessmentSchema(BaseModel):
     recommended_action: str = Field(description="Suggested next steps/SOP actions (e.g. Hold stock, QA investigation, replace item)")
 
 class ComplaintSchema(BaseModel):
-    product_name: Optional[str] = Field(None, description="Extracted pharmaceutical product name, capitalized")
-    strength: Optional[str] = Field(None, description="Strength of the product (e.g. 500 mg, 250mg)")
-    batch_number: Optional[str] = Field(None, description="The manufacturing batch or lot number")
+    product_name: Optional[str] = Field(
+        None, 
+        description="Generic or brand name of the drug or medical product (e.g. 'Ceftriaxone', 'Paracetamol', 'Amoxicillin'). NEVER use batch or lot codes."
+    )
+    strength: Optional[str] = Field(None, description="Strength or dosage form of the product (e.g. 1g, 500 mg, 250mg, 100ml)")
+    batch_number: Optional[str] = Field(
+        None, 
+        description="The alphanumeric manufacturing batch or lot number (e.g. 'CEFT-2024-99', 'LOT-9812'). Never the drug name."
+    )
     manufacturing_date: Optional[str] = Field(None, description="Manufacturing date (MFG)")
     expiry_date: Optional[str] = Field(None, description="Expiry date (EXP)")
-    quantity: Optional[str] = Field(None, description="Number/amount of items affected (e.g. 300 strips, 15 boxes)")
-    complaint_description: Optional[str] = Field(None, description="Detailed description of the customer complaint (e.g., broken capsules, discolored tablets)")
+    quantity: Optional[str] = Field(None, description="Number/amount of items affected (e.g. 80 vials, 300 strips, 15 boxes)")
+    complaint_description: Optional[str] = Field(None, description="Detailed description of the customer complaint (e.g., visible black particulate matter floating in reconstituted solution)")
 
 class ComplaintCreate(BaseModel):
     form: ComplaintSchema

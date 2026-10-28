@@ -4,8 +4,7 @@ import { sendChatMessage } from '../redux/complaintSlice';
 import { clearChat } from '../redux/chatSlice';
 import ChatMessage from './ChatMessage';
 import DocumentUploader from './DocumentUploader';
-import { Send, Bot, Minus, MessageSquare, RotateCcw } from 'lucide-react';
-
+import { Send, Bot, Minus, MessageSquare, RotateCcw, Zap } from 'lucide-react';
 
 export default function AIChat() {
   const dispatch = useDispatch();
@@ -30,11 +29,10 @@ export default function AIChat() {
     if (!isCollapsed) {
       scrollToBottom();
     }
-  }, [messages, isCollapsed]);
+  }, [messages, loading, isCollapsed]);
 
   // Handle Dragging
   const handleMouseDown = (e) => {
-    // If clicking on buttons or inputs, do not drag
     if (e.target.closest('button') || e.target.closest('input')) return;
     
     if (chatRef.current) {
@@ -96,7 +94,6 @@ export default function AIChat() {
         onClick={() => setIsCollapsed(false)}
         title="Open AI Co-Pilot"
         style={{
-          // If custom position was set, place the trigger bubble near it!
           top: position.y !== null ? `${Math.min(position.y + 540, window.innerHeight - 80)}px` : 'auto',
           left: position.x !== null ? `${Math.min(position.x + 330, window.innerWidth - 80)}px` : 'auto',
           bottom: position.y !== null ? 'auto' : '2rem',
@@ -108,7 +105,6 @@ export default function AIChat() {
     );
   }
 
-  // Inline styling overrides when the window has been dragged
   const windowStyle = {
     top: position.y !== null ? `${position.y}px` : 'auto',
     left: position.x !== null ? `${position.x}px` : 'auto',
@@ -140,8 +136,8 @@ export default function AIChat() {
           </h2>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-dark)', fontWeight: '600', pointerEvents: 'none' }}>
-            ONLINE
+          <span className="chat-live-badge">
+            <Zap size={11} /> LIVE AI
           </span>
           <button
             className="chat-close-btn"
@@ -160,11 +156,22 @@ export default function AIChat() {
         </div>
       </div>
 
-
       <div className="chat-messages" style={{ padding: '1rem' }}>
         {messages.map((msg, index) => (
           <ChatMessage key={index} message={msg} />
         ))}
+        {loading && (
+          <div className="message-wrapper assistant">
+            <div className="message-bubble typing-bubble">
+              <div className="typing-dots">
+                <span className="dot"></span>
+                <span className="dot"></span>
+                <span className="dot"></span>
+              </div>
+              <span className="typing-text">AI is extracting fields & assessing risk...</span>
+            </div>
+          </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
@@ -209,7 +216,7 @@ export default function AIChat() {
           <input
             type="text"
             className="chat-input"
-            placeholder={loading ? "Processing..." : "Type instruction or details..."}
+            placeholder={loading ? "AI processing..." : "Type instruction or complaint..."}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
@@ -231,4 +238,3 @@ export default function AIChat() {
     </div>
   );
 }
-
